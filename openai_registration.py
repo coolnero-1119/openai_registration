@@ -413,19 +413,17 @@ def _interruptible_sleep(seconds, stop_check=None):
 
 def generate_proxy_url(username=None, password=None, country="us", scheme="http", encode_auth=False):
     """
-    根据用户提供的 IPRoyal 凭据生成动态代理 URL。
-    如果未传入 username/password，将使用默认的 IPRoyal 配置。
+    根据用户提供的 IPRoyal 凭据生成代理 URL。
+    使用简单的 用户名:密码 格式（适用于标准住宅代理套餐）。
     """
-    # 默认使用您提供的 IPRoyal 代理池
     proxy_host = "geo.iproyal.com:12321"
-    auth_user = username.strip() if username else "sA2kavFArObbaV2l"
-    auth_pass = password.rstrip("\r\n") if password else "7Denv6fS3q71GXQQ"
+    auth_user  = username.strip() if username else "sA2kavFArObbaV2l"
+    auth_pass  = password.rstrip("\r\n") if password else "7Denv6fS3q71GXQQ"
 
     if encode_auth:
         auth_user = quote(auth_user, safe="")
         auth_pass = quote(auth_pass, safe="")
 
-    # 构建代理 URL (去除了原版不需要的 session 拼接逻辑)
     proxy_url = f"{scheme}://{auth_user}:{auth_pass}@{proxy_host}"
     return proxy_url
 

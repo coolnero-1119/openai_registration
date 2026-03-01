@@ -1230,5 +1230,31 @@ class ProtocolRegistrar:
                 log(f"Token 已保存: {saved_path}")
             return True, "Success"
         else:
-            log("注册成功，但获取 Token 失败")
+            log("注册成功，但获取 Token 失败，已存入待重试队列")
+            _save_pending_account(email, password)
             return True, "注册成功，Token 获取失败"
+
+
+def _save_pending_account(email, password):
+    """
+    将注册成功但 Token 获取失败的账号保存到 pending_accounts.json，
+    以便后续批量重试获取 Token。
+    """
+    pending_file = os.path.join(TOKENS_DIR, "pending_accounts.json")
+    try:
+        os.makedirs(TOKENS_DIR, exist_ok=True)
+        if os.path.exists(pending_file):
+            with open(pending_file, "r", encoding="utf-8") as f:
+                pending = json.load(f)
+        else:
+            pending = []
+
+        # 去重：如果已存在相同 email 则更新密码
+        pending = [p for p in pending if p.get("email") != email]
+        pending.append({"email": email, "password": password})
+
+        with open(pending_file, "w", encoding="utf-8") as f:
+            json.dump(pending, f, ensure_ascii=False, indent=2)
+        logger.info(f"已将账号存入待重试队列: {pending_file}")
+    except Exception as e:
+        logger.error(f"保存待重试账号失败: {e}")

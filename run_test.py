@@ -1,4 +1,5 @@
 import logging
+import time
 from openai_registration import (
     generate_cf_email,
     generate_random_password,
@@ -6,42 +7,80 @@ from openai_registration import (
     ProtocolRegistrar
 )
 
-# 配置日志输出格式，方便查看
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("test_run")
+logger = logging.getLogger("run_test")
+
+# 连续失败多少次后自动退出
+MAX_CONSECUTIVE_FAILURES = 3
+# 每次注册之间的等待秒数
+INTERVAL_SECONDS = 2
+
+
+def register_one():
+    """执行一次完整的注册流程，返回 (success, full_success, reason)。"""
+    email    = generate_cf_email()
+    password = generate_random_password()
+    logger.info(f"▶ 开始注册: {email}")
+
+    proxy_url = generate_proxy_url()
+    registrar = ProtocolRegistrar(proxy_url=proxy_url)
+    success, reason = registrar.register(account_data={"email": email}, password=password)
+    return success, reason
+
 
 def main():
-    logger.info("开始自动化注册获取 Token 测试...")
-    
-    # 1. 生成您的专属测试邮箱密码
-    email = generate_cf_email()
-    password = generate_random_password()
-    logger.info(f"生成的邮箱: {email}")
-    logger.info(f"生成的密码: {password}")
-    
-    # 账号配置字典传给内部函数用作获取验证码
-    account_data = {"email": email}
+    total         = 0
+    success_full  = 0   # 注册 + Token 均成功
+    success_reg   = 0   # 仅注册成功，Token 失败
+    failures      = 0
+    consecutive_failures = 0
 
-    # 2. 生成代理 (会自动读取我们刚才改好的 IPRoyal 配置)
-    proxy_url = generate_proxy_url()
-    logger.info(f"正在配置代理: {proxy_url.replace('7Denv6fS3q71GXQQ', '***')}")
-    
-    # 3. 初始化带有代理的协议注册器
-    registrar = ProtocolRegistrar(proxy_url=proxy_url)
-    
-    # 4. 执行完整自动化注册及提取 Token
-    logger.info("=========== 下方开始进入自动化网络流程 ===========")
-    success, reason = registrar.register(account_data=account_data, password=password)
-    
-    if success:
-        logger.info("太棒了！成功注册并且获取到 Token！")
-        logger.info(f"请检查 tokens 目录看是否生成了 {email}.json")
-    else:
-        logger.error(f"很遗憾，跑通失败: {reason}")
-        logger.error("请查看上方网络执行日志找原因。")
+    logger.info("========== 持续注册模式启动，按 Ctrl+C 停止 ==========")
+
+    while True:
+        total += 1
+        logger.info(f"\n======== 第 {total} 次注册 ========")
+        try:
+            success, reason = register_one()
+
+            if success and reason == "Success":
+                success_full += 1
+                consecutive_failures = 0
+                logger.info(f"🎉 完全成功！累计成功获取 Token: {success_full} 个")
+
+            elif success:
+                success_reg += 1
+                consecutive_failures = 0
+                logger.warning(f"⚠️  注册成功，Token 失败（已存入待重试队列）: {reason}")
+
+            else:
+                failures += 1
+                consecutive_failures += 1
+                logger.error(f"❌ 注册失败 [{consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}]: {reason}")
+
+        except KeyboardInterrupt:
+            logger.info("\n用户手动停止。")
+            break
+        except Exception as e:
+            failures += 1
+            consecutive_failures += 1
+            logger.error(f"❌ 异常 [{consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}]: {e}")
+
+        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            logger.error(f"\n连续失败 {MAX_CONSECUTIVE_FAILURES} 次，自动退出。")
+            break
+
+        logger.info(f"统计 → 全成功: {success_full} | 仅注册: {success_reg} | 失败: {failures}")
+        logger.info(f"等待 {INTERVAL_SECONDS} 秒后继续...")
+        time.sleep(INTERVAL_SECONDS)
+
+    logger.info(f"\n========== 运行结束 ==========")
+    logger.info(f"总次数: {total} | 全成功: {success_full} | 仅注册: {success_reg} | 失败: {failures}")
+
 
 if __name__ == "__main__":
     main()
+
